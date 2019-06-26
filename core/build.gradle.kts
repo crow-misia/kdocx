@@ -1,74 +1,95 @@
 import com.jfrog.bintray.gradle.BintrayExtension
-import org.gradle.api.publish.maven.MavenPom
+import org.jetbrains.dokka.gradle.DokkaTask
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     kotlin("jvm")
     `maven-publish`
-    id("com.jfrog.bintray") version "1.8.4"
+    id("org.jetbrains.dokka") version Versions.dokkaPlugin
+    id("com.jfrog.bintray") version Versions.bintrayPlugin
 }
 
-val artifactName = "kdocx"
-val artifactGroup = "io.github.zncmn"
-group = artifactGroup
-version = "1.0.0"
-
-val pomUrl = "https://github.com/crow-misia/kdocx"
-val pomScmUrl = "https://github.com/crow-misia/kdocx"
-val pomIssueUrl = "https://github.com/crow-misia/kdocx/issues"
-val pomDesc = "Word Document Template Engine written in Kotlin"
-val githubRepo = "crow_misia/kdocx"
-val pomLicenseName = "The Apache Software License, Version 2.0"
-val pomLicenseUrl = "http://www.apache.org/licenses/LICENSE-2.0.txt"
-val pomLicenseDist = "repo"
+group = Maven.groupId
+version = Versions.name
 
 dependencies {
     api(kotlin("stdlib"))
-    api("org.apache.poi:poi-ooxml:4.1.0")
-    api("org.apache.commons:commons-jexl3:3.1")
+    api(Deps.poiOoxml)
+    api(Deps.commonsJexl)
 
-    testImplementation("io.mockk:mockk:1.9.3")
-    testImplementation("com.willowtreeapps.assertk:assertk-jvm:0.17")
-    testImplementation("org.junit.jupiter:junit-jupiter:5.4.2")
+    testImplementation(Deps.mockk)
+    testImplementation(Deps.assertk)
+    testImplementation(Deps.junit5)
 }
+
 
 val sourcesJar by tasks.creating(Jar::class) {
+    group = JavaBasePlugin.DOCUMENTATION_GROUP
+    description = "Assembles sources JAR"
     archiveClassifier.set("sources")
-    from(sourceSets.main.get().allSource)
+    from(sourceSets["main"].allSource)
 }
 
-fun MavenPom.addDependencies() = withXml {
-    asNode().appendNode("dependencies").let { depNode ->
-        configurations.compile.get().allDependencies.forEach {
-            depNode.appendNode("dependency").apply {
-                appendNode("groupId", it.group)
-                appendNode("artifactId", it.name)
-                appendNode("version", it.version)
-            }
-        }
-    }
+val dokka by tasks.getting(DokkaTask::class) {
+    outputFormat = "html"
+    outputDirectory = "$buildDir/javadoc"
+    jdkVersion = 6
+}
+
+val dokkaJar by tasks.creating(Jar::class) {
+    group = JavaBasePlugin.DOCUMENTATION_GROUP
+    description = "Assembles Kotlin docs with Dokka"
+    archiveClassifier.set("javadoc")
+    from(dokka)
 }
 
 val publicationName = "core"
 publishing {
     publications {
         create<MavenPublication>(publicationName) {
-            groupId = artifactGroup
-            artifactId = artifactName
+            groupId = Maven.groupId
+            artifactId = Maven.artifactId
+            version = Versions.name
+
+            println("""
+                    |Creating maven publication '$publicationName'
+                    |    Group: $groupId
+                    |    Artifact: $artifactId
+                    |    Version: $version
+                """.trimMargin())
+
             artifact(sourcesJar)
+            artifact(dokkaJar)
             from(components["kotlin"])
-            pom.withXml {
-                asNode().apply {
-                    appendNode("description", pomDesc)
-                    appendNode("name", artifactName)
-                    appendNode("url", pomUrl)
-                    appendNode("licenses").appendNode("license").apply {
-                        appendNode("name", pomLicenseName)
-                        appendNode("url", pomLicenseUrl)
-                        appendNode("distribution", pomLicenseDist)
+
+            pom {
+                name.set(Maven.name)
+                description.set(Maven.desc)
+                url.set(Maven.siteUrl)
+
+                scm {
+                    val scmUrl = "scm:git:${Maven.gitUrl}"
+                    connection.set(scmUrl)
+                    developerConnection.set(scmUrl)
+                    url.set(this@pom.url)
+                    tag.set("HEAD")
+                }
+
+                developers {
+                    developer {
+                        id.set("crow-misia")
+                        name.set("Zenichi Amano")
+                        email.set("crow.misia@gmail.com")
+                        roles.set(listOf("Project-Administrator", "Developer"))
+                        timezone.set("+9")
                     }
-                    appendNode("scm").apply {
-                        appendNode("url", pomScmUrl)
+                }
+
+                licenses {
+                    license {
+                        name.set(Maven.licenseName)
+                        url.set(Maven.licenseUrl)
+                        distribution.set(Maven.licenseDist)
                     }
                 }
             }
@@ -82,16 +103,17 @@ bintray {
     key = findProperty("bintray_apikey")
     publish = true
     setPublications(publicationName)
+    override=true
     pkg(delegateClosureOf<BintrayExtension.PackageConfig> {
         repo = "maven"
-        name = artifactName
-        setLicenses("Apache-2.0")
-        setLabels("kotlin")
-        issueTrackerUrl = pomIssueUrl
-        vcsUrl = pomScmUrl
-        githubRepo = githubRepo
-        description = pomDesc
-        desc = description
+        name = Maven.name
+        desc = Maven.desc
+        setLicenses(*Maven.licenses)
+        setLabels(*Maven.labels)
+        issueTrackerUrl = Maven.issueTrackerUrl
+        vcsUrl = Maven.gitUrl
+        githubRepo = Maven.githubRepo
+        description = Maven.desc
     })
 }
 
@@ -107,4 +129,3 @@ tasks {
         }
     }
 }
-
